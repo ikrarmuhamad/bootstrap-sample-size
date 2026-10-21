@@ -2,7 +2,7 @@
 
 Find the **minimum sample size** needed to reach a target margin error, using the bootstrap method.
 
-Instead of relying on a closed-form formula that assumes a normal distribution, this project resamples your own data and measures how wide the confidence interval is at each sample size. The search stops at the first size that is precise enough. It works for any metric (mean, median, standard deviation, ...) and for data that is not normally distributed.
+For the sample mean there is a classic equation, `n = (z * sd / E)^2`. For other metrics such as the median or a percentile, there is usually no simple equation. This project takes a different route: it resamples your own data and measures how wide the confidence interval is at each sample size. The search stops at the first size that is precise enough. Because it only needs a function that turns an array into one number, it works for any metric (mean, median, standard deviation, ...).
 
 ![Bootstrap result](images/bootstrap_result.png)
 
@@ -17,7 +17,7 @@ Instead of relying on a closed-form formula that assumes a normal distribution, 
 
 ## Example
 
-The demo data is 3,000 values from a **U-shaped Beta(0.5, 0.5)** distribution. It is far from normal, which makes it a good test for a bootstrap approach.
+The demo data is 3,000 values from a **U-shaped Beta(0.5, 0.5)** distribution. The data itself is far from normal, but that is fine: what matters is the distribution of the *sample mean*, which becomes approximately normal as the sample grows (Central Limit Theorem). That also gives a way to check the result against the classic equation.
 
 ![Demo data](images/beta_data.png)
 
@@ -43,7 +43,17 @@ n_sample = model.find_n_sample(plot=True)  # same, with a plot at every step
 
 With `seed=42`, the minimum sample size found is **600**, where the margin error is about 0.0298 (target: 0.03).
 
-As a sanity check, the standard deviation of Beta(0.5, 0.5) is about 0.354. The classic formula `n = (1.96 * sd / E)^2` gives roughly 534, which is close to the bootstrap result. The difference comes from the step size (100) and the randomness of resampling.
+### Sanity check against the classic equation
+
+For the mean, the sampling distribution is approximately normal (Central Limit Theorem), so `z = 1.96` applies to the *mean*, not to the raw data. The standard deviation of Beta(0.5, 0.5) is `sqrt(0.125) ≈ 0.354`, so:
+
+```
+n = (z * sd / E)^2 = (1.96 * 0.354 / 0.03)^2 ≈ 534
+```
+
+The search moves in steps of 100, and 534 is not a multiple of 100, so the first size that passes is 600. The margin error at 600 from the bootstrap (0.0298) is slightly above the theoretical value (0.0283); this is the random noise of 2,000 resamples and gets smaller with a larger `n_bootstrap`. Use a smaller `n_steps` (e.g. 10) to get closer to 534.
+
+The two approaches agree here because both rely on the same fact: the mean of a large sample is approximately normal. The bootstrap pays off for metrics where no such simple equation exists.
 
 ## Parameters
 
@@ -85,7 +95,7 @@ Requires Python 3.9 or newer.
 ├── bootstrap_sample_size.py          # BootstrapSampleSize class
 ├── run_example.py                    # Runnable example script
 ├── bootstrap_sample_size_demo.ipynb  # Walkthrough notebook
-├── images/             # Figures used in this README
+├── images/                           # Figures used in this README
 ├── requirements.txt
 ├── LICENSE
 └── README.md
@@ -96,6 +106,7 @@ Requires Python 3.9 or newer.
 - The margin error is an **absolute** value, so choose it according to the scale of your data.
 - Resampling is done with replacement, so the sample size can exceed the number of rows in `data`. The result then describes the precision you would expect from a fresh sample of that size, assuming your data represents the population well.
 - For metrics whose spread does not shrink as the sample grows (e.g. `np.max`), the target may never be reached and `ValueError` is raised at `max_steps`.
+- The margin error is computed as half of the percentile interval, `(upper - lower) / 2`. For a skewed bootstrap distribution (e.g. for the median or an extreme percentile) the interval is not symmetric, so this is an approximation.
 - Runtime grows with `n_bootstrap` and with the number of steps. Increase `n_steps` for a faster, coarser search.
 
 ## License
